@@ -285,6 +285,23 @@ async function deliver(notice, urls) {
   }
 }
 
+/**
+ * Compare the declaration with the project on every build, using the same
+ * local check as `provenance check`. Suggestions are warnings; a clash with a
+ * promise fails the build only in strict mode. Nothing is sent anywhere.
+ */
+async function checkCode(parsed, filePath, mode) {
+  const { checkProject } = await import('provenance-protocol/check');
+  const dir = path.dirname(path.resolve(filePath));
+  const r = checkProject(dir, parsed);
+  const describe = (f) => `${f.field}: ${f.change === 'modified' ? `${f.from} -> ` : '+ '}${f.field === 'dependencies' ? (f.value.provenance_id || f.value.url) : f.value} (${f.reason})`;
+  for (const f of r.certain) core.warning(`Passport out of date — ${describe(f)}. Run: npx provenance-protocol check --update`);
+  for (const f of r.likely) core.warning(`Please confirm — ${describe(f)}. Run: npx provenance-protocol check --update, or list "${f.key}" in .provenance-ignore`);
+  const conflicts = r.conflicts.map((c) => `Code conflicts with the promise ${c.promise} (${c.reason}). Change the code, or remove the promise yourself and re-sign.`);
+  if (r.inSync) core.info('\u2713 Passport matches the project');
+  return { conflicts, outstanding: r.certain.length + r.likely.length };
+}
+
 async function run() {
   try {
     const filePath = core.getInput('file-path') || 'PROVENANCE.yml';
@@ -326,6 +343,26 @@ async function run() {
         // A verifier that cannot run must not be reported as a bad declaration.
         core.warning(`Signature could not be verified: ${e.message}. The declaration was not checked cryptographically.`);
         core.setOutput('signature', 'unchecked');
+      }
+    }
+
+    const codeMode = core.getInput('check-code') || 'suggest';
+    if (!['off', 'suggest', 'strict'].includes(codeMode)) {
+      result.errors.push(`check-code must be off, suggest or strict (got "${codeMode}")`);
+      result.valid = false;
+    } else if (codeMode !== 'off' && result.parsed) {
+      try {
+        const c = await checkCode(result.parsed, filePath, codeMode);
+        if (codeMode === 'strict') {
+          result.errors.push(...c.conflicts);
+          if (c.outstanding) result.errors.push(`${c.outstanding} passport update(s) outstanding (strict mode)`);
+          if (c.conflicts.length || c.outstanding) result.valid = false;
+        } else {
+          c.conflicts.forEach((m) => core.warning(m));
+        }
+      } catch (e) {
+        // Could not check is not the same as checked and found nothing.
+        core.warning(`Code check could not run: ${e.message}. The passport was not compared with the project.`);
       }
     }
 

@@ -29861,6 +29861,14 @@ module.exports = require("net");
 
 /***/ }),
 
+/***/ 1421:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("node:child_process");
+
+/***/ }),
+
 /***/ 7598:
 /***/ ((module) => {
 
@@ -29874,6 +29882,22 @@ module.exports = require("node:crypto");
 
 "use strict";
 module.exports = require("node:events");
+
+/***/ }),
+
+/***/ 3024:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("node:fs");
+
+/***/ }),
+
+/***/ 6760:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("node:path");
 
 /***/ }),
 
@@ -29914,6 +29938,14 @@ module.exports = require("path");
 
 "use strict";
 module.exports = require("perf_hooks");
+
+/***/ }),
+
+/***/ 932:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("process");
 
 /***/ }),
 
@@ -31674,6 +31706,36 @@ module.exports = /*#__PURE__*/JSON.parse('{"$comment":"Standard vocabulary for P
 /******/ 	__nccwpck_require__.m = __webpack_modules__;
 /******/ 	
 /************************************************************************/
+/******/ 	/* webpack/runtime/create fake namespace object */
+/******/ 	(() => {
+/******/ 		var getProto = Object.getPrototypeOf ? (obj) => (Object.getPrototypeOf(obj)) : (obj) => (obj.__proto__);
+/******/ 		var leafPrototypes;
+/******/ 		// create a fake namespace object
+/******/ 		// mode & 1: value is a module id, require it
+/******/ 		// mode & 2: merge all properties of value into the ns
+/******/ 		// mode & 4: return value when already ns object
+/******/ 		// mode & 16: return value when it's Promise-like
+/******/ 		// mode & 8|1: behave like require
+/******/ 		__nccwpck_require__.t = function(value, mode) {
+/******/ 			if(mode & 1) value = this(value);
+/******/ 			if(mode & 8) return value;
+/******/ 			if(typeof value === 'object' && value) {
+/******/ 				if((mode & 4) && value.__esModule) return value;
+/******/ 				if((mode & 16) && typeof value.then === 'function') return value;
+/******/ 			}
+/******/ 			var ns = Object.create(null);
+/******/ 			__nccwpck_require__.r(ns);
+/******/ 			var def = {};
+/******/ 			leafPrototypes = leafPrototypes || [null, getProto({}), getProto([]), getProto(getProto)];
+/******/ 			for(var current = mode & 2 && value; typeof current == 'object' && !~leafPrototypes.indexOf(current); current = getProto(current)) {
+/******/ 				Object.getOwnPropertyNames(current).forEach((key) => (def[key] = () => (value[key])));
+/******/ 			}
+/******/ 			def['default'] = () => (value);
+/******/ 			__nccwpck_require__.d(ns, def);
+/******/ 			return ns;
+/******/ 		};
+/******/ 	})();
+/******/ 	
 /******/ 	/* webpack/runtime/define property getters */
 /******/ 	(() => {
 /******/ 		// define getter functions for harmony exports
@@ -31711,6 +31773,17 @@ module.exports = /*#__PURE__*/JSON.parse('{"$comment":"Standard vocabulary for P
 /******/ 	/* webpack/runtime/hasOwnProperty shorthand */
 /******/ 	(() => {
 /******/ 		__nccwpck_require__.o = (obj, prop) => (Object.prototype.hasOwnProperty.call(obj, prop))
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/make namespace object */
+/******/ 	(() => {
+/******/ 		// define __esModule on exports
+/******/ 		__nccwpck_require__.r = (exports) => {
+/******/ 			if(typeof Symbol !== 'undefined' && Symbol.toStringTag) {
+/******/ 				Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
+/******/ 			}
+/******/ 			Object.defineProperty(exports, '__esModule', { value: true });
+/******/ 		};
 /******/ 	})();
 /******/ 	
 /******/ 	/* webpack/runtime/compat */
@@ -32048,6 +32121,23 @@ async function deliver(notice, urls) {
   }
 }
 
+/**
+ * Compare the declaration with the project on every build, using the same
+ * local check as `provenance check`. Suggestions are warnings; a clash with a
+ * promise fails the build only in strict mode. Nothing is sent anywhere.
+ */
+async function checkCode(parsed, filePath, mode) {
+  const { checkProject } = await Promise.all(/* import() */[__nccwpck_require__.e(37), __nccwpck_require__.e(590)]).then(__nccwpck_require__.bind(__nccwpck_require__, 9590));
+  const dir = path.dirname(path.resolve(filePath));
+  const r = checkProject(dir, parsed);
+  const describe = (f) => `${f.field}: ${f.change === 'modified' ? `${f.from} -> ` : '+ '}${f.field === 'dependencies' ? (f.value.provenance_id || f.value.url) : f.value} (${f.reason})`;
+  for (const f of r.certain) core.warning(`Passport out of date — ${describe(f)}. Run: npx provenance-protocol check --update`);
+  for (const f of r.likely) core.warning(`Please confirm — ${describe(f)}. Run: npx provenance-protocol check --update, or list "${f.key}" in .provenance-ignore`);
+  const conflicts = r.conflicts.map((c) => `Code conflicts with the promise ${c.promise} (${c.reason}). Change the code, or remove the promise yourself and re-sign.`);
+  if (r.inSync) core.info('\u2713 Passport matches the project');
+  return { conflicts, outstanding: r.certain.length + r.likely.length };
+}
+
 async function run() {
   try {
     const filePath = core.getInput('file-path') || 'PROVENANCE.yml';
@@ -32089,6 +32179,26 @@ async function run() {
         // A verifier that cannot run must not be reported as a bad declaration.
         core.warning(`Signature could not be verified: ${e.message}. The declaration was not checked cryptographically.`);
         core.setOutput('signature', 'unchecked');
+      }
+    }
+
+    const codeMode = core.getInput('check-code') || 'suggest';
+    if (!['off', 'suggest', 'strict'].includes(codeMode)) {
+      result.errors.push(`check-code must be off, suggest or strict (got "${codeMode}")`);
+      result.valid = false;
+    } else if (codeMode !== 'off' && result.parsed) {
+      try {
+        const c = await checkCode(result.parsed, filePath, codeMode);
+        if (codeMode === 'strict') {
+          result.errors.push(...c.conflicts);
+          if (c.outstanding) result.errors.push(`${c.outstanding} passport update(s) outstanding (strict mode)`);
+          if (c.conflicts.length || c.outstanding) result.valid = false;
+        } else {
+          c.conflicts.forEach((m) => core.warning(m));
+        }
+      } catch (e) {
+        // Could not check is not the same as checked and found nothing.
+        core.warning(`Code check could not run: ${e.message}. The passport was not compared with the project.`);
       }
     }
 

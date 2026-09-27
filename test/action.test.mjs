@@ -109,5 +109,27 @@ t('says so when there is no version to release', !r.failed && r.stdout.includes(
 r = runAction(signed);
 t('no key, no notice, no noise', !r.failed && !output(r.outputs, 'release-notice') && !r.stdout.includes('Release notice'));
 
+// 8. code check: suggest warns, strict fails on a promise conflict
+{
+  const proj = mkdtempSync(join(tmpdir(), 'proj-'));
+  writeFileSync(join(proj, 'package.json'), JSON.stringify({ name: 'x', version: '1.0.0', dependencies: { nodemailer: '6' } }));
+  const decl = { ...base, version: '1.0.0', constraints: ['no:pii', 'no:write:email'] };
+  const signedDecl = { ...decl, identity: { ...decl.identity, signature: signDeclaration(privateKey, decl) } };
+  const file = join(proj, 'PROVENANCE.yml');
+  writeFileSync(file, stringify(signedDecl));
+  const runIn = (env) => {
+    const outFile = join(dir, 'out2.txt'); writeFileSync(outFile, '');
+    try {
+      return { failed: false, stdout: execFileSync('node', ['dist/index.js'], { env: { ...process.env, 'INPUT_FILE-PATH': file, GITHUB_OUTPUT: outFile, GITHUB_REPOSITORY: REPO, ...env }, encoding: 'utf8' }) };
+    } catch (e) { return { failed: true, stdout: (e.stdout || '') + (e.stderr || '') }; }
+  };
+  let c = runIn({});
+  t('suggest (default): a promise conflict warns but does not fail', !c.failed && /conflicts with the promise no:write:email/.test(c.stdout), c.stdout.slice(-300));
+  c = runIn({ 'INPUT_CHECK-CODE': 'strict' });
+  t('strict: a promise conflict fails the build', c.failed && /no:write:email/.test(c.stdout), c.stdout.slice(-300));
+  c = runIn({ 'INPUT_CHECK-CODE': 'off' });
+  t('off: no code check', !c.failed && !/conflicts with the promise/.test(c.stdout));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

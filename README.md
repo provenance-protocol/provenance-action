@@ -61,6 +61,17 @@ The action warns about non-standard capabilities and constraints, encouraging us
 - `valid`: `"true"` or `"false"`
 - `errors`: Validation errors (newline-separated)
 
+## Keeping the passport true
+
+On every build the action compares the declaration with the project — the same
+local check as `npx provenance-protocol check`. When the code has moved on (a new
+version, a new AI provider, a new MCP server, a library implying a new
+capability) you get a warning and the one command that fixes it:
+`npx provenance-protocol check --update`. When the code clashes with a promise —
+an email library while the passport says `no:write:email` — you are told, and the
+promise is never changed for you. Set `check-code: strict` to fail the build
+instead.
+
 ## Signed release notes (optional)
 
 Give the action the agent's private key and it issues a signed notice tying
@@ -119,6 +130,7 @@ MIT
 | `verify-signature` | `true` | Cryptographically verify `identity.signature` when present |
 | `require-signature` | `false` | Fail when the declaration carries no signature at all |
 | `check-repository` | `true` | Check `provenance_id` names the repository this runs in |
+| `check-code` | `suggest` | Compare the declaration with the project on every build. `suggest` warns when the passport is out of date or the code clashes with a promise; `strict` fails the build; `off` skips it. Read locally — nothing is sent anywhere. |
 
 ## Outputs
 
