@@ -64,13 +64,46 @@ The action warns about non-standard capabilities and constraints, encouraging us
 ## Keeping the passport true
 
 On every build the action compares the declaration with the project — the same
-local check as `npx provenance-protocol check`. When the code has moved on (a new
-version, a new AI provider, a new MCP server, a library implying a new
-capability) you get a warning and the one command that fixes it:
-`npx provenance-protocol check --update`. When the code clashes with a promise —
-an email library while the passport says `no:write:email` — you are told, and the
-promise is never changed for you. Set `check-code: strict` to fail the build
-instead.
+local check as `npx provenance-protocol check`. The code is read inside your own
+pipeline; nothing is sent anywhere, and **no key is ever needed in CI**.
+
+| `check-code` | What happens when the passport is out of date |
+|---|---|
+| `warn` (default) | A warning, and the one command that fixes it |
+| `suggest` (recommended) | On pushes to your default branch, a pull request with the facts applied |
+| `automatic` | On pushes to your default branch, the facts are committed directly — when your running service signs the passport |
+| `strict` | The build fails until it is up to date |
+| `off` | No comparison |
+
+Only facts the project states outright are ever applied (version, the AI
+provider's library, servers in your MCP settings). Inferences are listed for
+you to confirm, and a clash with a promise is reported and **never** changed
+for you — dropping a promise is a public weakening a person must decide.
+
+**Who signs the update** (`signed-by`, default `auto`):
+
+- `service` — your service runs `provenance-middleware`, which signs the
+  passport every time it starts. Updates are written unsigned and your service
+  signs them on its next start. Both `suggest` and `automatic` work fully.
+- `developer` — the passport is a file published in your repository. The pull
+  request asks you to run `npx provenance-protocol sign` on its branch before
+  merging, so the key stays on your machine; the action fails that pull request
+  until it is signed. `automatic` falls back to a pull request, because nothing
+  in CI can sign without your key.
+- `auto` — `service` for `provenance:domain:` identifiers, `developer` otherwise.
+
+`suggest` and `automatic` need the workflow to be allowed to write:
+
+```yaml
+permissions:
+  contents: write
+  pull-requests: write
+```
+
+Without it the action says exactly which permission is missing and falls back
+to a warning. They never act on pull requests or other branches, and the
+working copy is restored afterwards, so a later deploy step in the same job
+never ships an unmerged proposal.
 
 ## Signed release notes (optional)
 
@@ -130,7 +163,9 @@ MIT
 | `verify-signature` | `true` | Cryptographically verify `identity.signature` when present |
 | `require-signature` | `false` | Fail when the declaration carries no signature at all |
 | `check-repository` | `true` | Check `provenance_id` names the repository this runs in |
-| `check-code` | `suggest` | Compare the declaration with the project on every build. `suggest` warns when the passport is out of date or the code clashes with a promise; `strict` fails the build; `off` skips it. Read locally — nothing is sent anywhere. |
+| `check-code` | `warn` | Compare the declaration with the project on every build: `warn`, `suggest`, `automatic`, `strict` or `off` — see *Keeping the passport true*. |
+| `signed-by` | `auto` | Who signs after an update: `service`, `developer` or `auto`. |
+| `github-token` | the workflow token | Used to open the pull request in `suggest` mode. |
 
 ## Outputs
 

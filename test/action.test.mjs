@@ -124,7 +124,7 @@ t('no key, no notice, no noise', !r.failed && !output(r.outputs, 'release-notice
     } catch (e) { return { failed: true, stdout: (e.stdout || '') + (e.stderr || '') }; }
   };
   let c = runIn({});
-  t('suggest (default): a promise conflict warns but does not fail', !c.failed && /conflicts with the promise no:write:email/.test(c.stdout), c.stdout.slice(-300));
+  t('warn (default): a promise conflict warns but does not fail', !c.failed && /conflicts with the promise no:write:email/.test(c.stdout), c.stdout.slice(-300));
   c = runIn({ 'INPUT_CHECK-CODE': 'strict' });
   t('strict: a promise conflict fails the build', c.failed && /no:write:email/.test(c.stdout), c.stdout.slice(-300));
   c = runIn({ 'INPUT_CHECK-CODE': 'off' });

@@ -2607,7 +2607,6 @@ exports.prettifyError = prettifyError;
 /***/ 8815:
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
-var __webpack_unused_export__;
 
 
 var composer = __webpack_require__(9984);
@@ -2629,35 +2628,35 @@ var visit = __webpack_require__(204);
 
 
 
-__webpack_unused_export__ = composer.Composer;
-__webpack_unused_export__ = Document.Document;
-__webpack_unused_export__ = Schema.Schema;
-__webpack_unused_export__ = errors.YAMLError;
-__webpack_unused_export__ = errors.YAMLParseError;
-__webpack_unused_export__ = errors.YAMLWarning;
-__webpack_unused_export__ = Alias.Alias;
-__webpack_unused_export__ = identity.isAlias;
-__webpack_unused_export__ = identity.isCollection;
-__webpack_unused_export__ = identity.isDocument;
-__webpack_unused_export__ = identity.isMap;
-__webpack_unused_export__ = identity.isNode;
-__webpack_unused_export__ = identity.isPair;
-__webpack_unused_export__ = identity.isScalar;
-__webpack_unused_export__ = identity.isSeq;
-__webpack_unused_export__ = Pair.Pair;
-__webpack_unused_export__ = Scalar.Scalar;
-__webpack_unused_export__ = YAMLMap.YAMLMap;
-__webpack_unused_export__ = YAMLSeq.YAMLSeq;
-__webpack_unused_export__ = cst;
-__webpack_unused_export__ = lexer.Lexer;
-__webpack_unused_export__ = lineCounter.LineCounter;
-__webpack_unused_export__ = parser.Parser;
-__webpack_unused_export__ = publicApi.parse;
-__webpack_unused_export__ = publicApi.parseAllDocuments;
-__webpack_unused_export__ = publicApi.parseDocument;
-__webpack_unused_export__ = publicApi.stringify;
-__webpack_unused_export__ = visit.visit;
-__webpack_unused_export__ = visit.visitAsync;
+exports.Composer = composer.Composer;
+exports.Document = Document.Document;
+exports.Schema = Schema.Schema;
+exports.YAMLError = errors.YAMLError;
+exports.YAMLParseError = errors.YAMLParseError;
+exports.YAMLWarning = errors.YAMLWarning;
+exports.Alias = Alias.Alias;
+exports.isAlias = identity.isAlias;
+exports.isCollection = identity.isCollection;
+exports.isDocument = identity.isDocument;
+exports.isMap = identity.isMap;
+exports.isNode = identity.isNode;
+exports.isPair = identity.isPair;
+exports.isScalar = identity.isScalar;
+exports.isSeq = identity.isSeq;
+exports.Pair = Pair.Pair;
+exports.Scalar = Scalar.Scalar;
+exports.YAMLMap = YAMLMap.YAMLMap;
+exports.YAMLSeq = YAMLSeq.YAMLSeq;
+exports.CST = cst;
+exports.Lexer = lexer.Lexer;
+exports.LineCounter = lineCounter.LineCounter;
+exports.Parser = parser.Parser;
+exports.parse = publicApi.parse;
+exports.parseAllDocuments = publicApi.parseAllDocuments;
+exports.parseDocument = publicApi.parseDocument;
+exports.stringify = publicApi.stringify;
+exports.visit = visit.visit;
+exports.visitAsync = visit.visitAsync;
 
 
 /***/ }),
@@ -8576,7 +8575,8 @@ exports.visitAsync = visitAsync;
 
 // EXPORTS
 __webpack_require__.d(__webpack_exports__, {
-  checkProject: () => (/* binding */ checkProject)
+  checkProject: () => (/* binding */ checkProject),
+  updateDeclarationText: () => (/* binding */ updateDeclarationText)
 });
 
 // UNUSED EXPORTS: IGNORE_FILE, applyFindings, readIgnore
@@ -8585,10 +8585,10 @@ __webpack_require__.d(__webpack_exports__, {
 var external_node_fs_ = __webpack_require__(3024);
 // EXTERNAL MODULE: external "node:path"
 var external_node_path_ = __webpack_require__(6760);
-// EXTERNAL MODULE: external "node:child_process"
-var external_node_child_process_ = __webpack_require__(1421);
 // EXTERNAL MODULE: ./node_modules/yaml/dist/index.js
 var dist = __webpack_require__(8815);
+// EXTERNAL MODULE: external "node:child_process"
+var external_node_child_process_ = __webpack_require__(1421);
 // EXTERNAL MODULE: ./node_modules/provenance-protocol/src/keygen.js
 var keygen = __webpack_require__(4891);
 // EXTERNAL MODULE: ./node_modules/provenance-protocol/src/verify.js
@@ -9119,6 +9119,7 @@ async function runInit(dir, { ask, yes = false, domain, force = false, privateKe
 
 
 
+
 /** Where a project lists findings it has reviewed and wants left alone. */
 const IGNORE_FILE = '.provenance-ignore';
 
@@ -9219,6 +9220,33 @@ function applyFindings(declaration, findings) {
   }
   if (d.identity) delete d.identity.signature;
   return d;
+}
+
+/**
+ * Apply findings to the text of a declaration file, keeping its comments and
+ * layout, and removing the now-stale signature. Returns the new text, unsigned:
+ * sign it where the key lives — at start-up by provenance-middleware, or on the
+ * developer's machine with `provenance sign`. Nothing here needs a key.
+ *
+ * @param {string} text        The file's current contents
+ * @param {object[]} findings  Items from checkProject's certain or likely lists
+ * @param {object} [options]
+ * @param {boolean} [options.json]  The file is JSON rather than YAML
+ * @returns {{ text: string, declaration: object }}
+ */
+function updateDeclarationText(text, findings, { json = false } = {}) {
+  if (json) {
+    const updated = applyFindings(JSON.parse(text), findings);
+    return { text: JSON.stringify(updated, null, 2) + '\n', declaration: updated };
+  }
+  const doc = dist.parseDocument(text);
+  if (doc.errors.length) throw new Error(doc.errors[0].message);
+  const updated = applyFindings(doc.toJS(), findings);
+  for (const field of new Set(findings.map((f) => f.field.split('.')[0]))) {
+    doc.setIn([field], doc.createNode(updated[field]));
+  }
+  if (doc.hasIn(['identity', 'signature'])) doc.deleteIn(['identity', 'signature']);
+  return { text: doc.toString(), declaration: updated };
 }
 
 

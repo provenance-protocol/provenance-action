@@ -28,9 +28,17 @@ inputs:
     default: 'true'
 
   check-code:
-    description: "Compare the declaration with the project on every build (read locally, nothing sent anywhere): 'suggest' warns (default), 'strict' fails the build on outstanding updates or a clash with a promise, 'off' skips it."
+    description: "Compare the declaration with the project on every build (read locally, nothing sent anywhere, no key used). 'warn' (default) reports; 'suggest' opens a pull request with the facts applied on pushes to the default branch; 'automatic' commits them directly when the running service signs; 'strict' fails the build while anything is outstanding; 'off' skips it."
     required: false
-    default: 'suggest'
+    default: 'warn'
+  signed-by:
+    description: "Who signs the passport after an update: 'service' (provenance-middleware signs at start-up), 'developer' (sign locally before merging), or 'auto' (service for provenance:domain ids, developer otherwise)."
+    required: false
+    default: 'auto'
+  github-token:
+    description: 'Token used to open the pull request in suggest mode. The default workflow token is enough with permissions: contents: write and pull-requests: write.'
+    required: false
+    default: ${{ github.token }}
   release-private-key:
     description: 'Optional. The agent private key (use a secret). When set, issues a signed release notice tying this release to the declaration digest.'
     required: false
