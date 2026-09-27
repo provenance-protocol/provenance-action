@@ -152,7 +152,7 @@ contact:
 
 ## License
 
-MIT
+Apache License 2.0 — see [LICENSE](./LICENSE). Versions before 1.5.1 were released under MIT.
 
 ## Inputs
 
