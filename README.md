@@ -47,7 +47,7 @@ jobs:
 
 The action warns about non-standard capabilities and constraints, encouraging use of canonical terms:
 
-The list is read from the standard's own [`vocabulary.json`](https://github.com/provenance-protocol/provenance-protocol/blob/main/vocabulary.json), so this action and the standard cannot drift apart. At the time of writing:
+The action uses the vocabulary bundled with its provenance-protocol version (0.15.1 in v1.6.0), not a copy of its own. The current list is in the standard's [`vocabulary.json`](https://github.com/provenance-protocol/provenance-protocol/blob/main/vocabulary.json); at the time of writing:
 
 **Standard capabilities:**
 - Read: `read:web`, `read:files`, `read:database`, `read:email`, `read:calendar`, `read:code`, `read:pdf`, `read:images`, `read:audio`
