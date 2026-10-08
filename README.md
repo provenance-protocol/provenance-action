@@ -47,14 +47,16 @@ jobs:
 
 The action warns about non-standard capabilities and constraints, encouraging use of canonical terms:
 
-**Standard Capabilities:**
-- `read:web`, `read:filesystem`, `write:filesystem`
-- `execute:code`, `network:outbound`
-- `database:read`, `database:write`, `api:external`
+The list is read from the standard's own [`vocabulary.json`](https://github.com/provenance-protocol/provenance-protocol/blob/main/vocabulary.json), so this action and the standard cannot drift apart. At the time of writing:
 
-**Standard Constraints:**
-- `no:financial:transact`, `no:pii`, `no:data:export`
-- `no:code:execute`, `no:system:modify`
+**Standard capabilities:**
+- Read: `read:web`, `read:files`, `read:database`, `read:email`, `read:calendar`, `read:code`, `read:pdf`, `read:images`, `read:audio`
+- Write: `write:files`, `write:database`, `write:email`, `write:code`, `write:summaries`, `write:external`
+- Execute: `execute:code` (in a sandbox), `execute:terminal`, `execute:browser`
+- Money: `financial:read`, `financial:transact`
+- Delegate: `delegate:agents`, `delegate:humans`
+
+**Standard constraints:** any standard capability prefixed with `no:` (for example `no:financial:transact`, `no:write:email`, `no:execute:code`), plus `no:pii`: will never collect personal data.
 
 ## Outputs
 
