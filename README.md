@@ -32,7 +32,7 @@ jobs:
 ## What it checks
 
 ### Required Fields
-- `provenance`: Spec version — `"0.2"` for new declarations, `"0.1"` legacy
+- `provenance`: Spec version — `"0.2"` for new declarations, `"0.3"` when a dependency carries a `pin`, `"0.1"` legacy
 - `name`: Agent name
 - `description`: Agent description
 

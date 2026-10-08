@@ -230,7 +230,7 @@ function canonicalJson(value) {
 /* harmony export */   keyFingerprint: () => (/* binding */ keyFingerprint),
 /* harmony export */   verifyDeclaration: () => (/* binding */ verifyDeclaration)
 /* harmony export */ });
-/* unused harmony exports parseProvenanceId, verifyAgentChallenge, verifyAgentRevocation, verifyChallenge, verifyRevocation, locateDeclaration, checkDeclaration, verifyAttestation, verifyAttestationWithdrawal, verifyNotice, checkInteropLinks, openDeliveredDeclaration */
+/* unused harmony exports parseProvenanceId, verifyAgentChallenge, verifyAgentRevocation, verifyChallenge, verifyRevocation, locateDeclaration, checkDeclaration, verifyAttestation, verifyAttestationWithdrawal, verifyNotice, checkInteropLinks, openDeliveredDeclaration, checkPins, locateIndex, readIndex */
 /* harmony import */ var _canonical_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(1044);
 /**
  * provenance-protocol — offline verification
@@ -265,7 +265,7 @@ const ALGORITHM = 'ed25519';
  *   0.2 — signs the canonical form of the whole declaration. Any change to any
  *         field breaks it.
  */
-const SIGNATURE_COVERAGE = { '0.1': 'identity', '0.2': 'declaration' };
+const SIGNATURE_COVERAGE = { '0.1': 'identity', '0.2': 'declaration', '0.3': 'declaration' };
 
 function subtle() {
   const s = globalThis.crypto?.subtle;
@@ -330,28 +330,36 @@ function parseProvenanceId(provenanceId) {
   return { platform: match[1].toLowerCase(), path: match[2] };
 }
 
-const HOST_PLATFORMS = [
-  [/(^|\.)github\.com$/i, 'github'],
-  [/(^|\.)githubusercontent\.com$/i, 'github'],
-  [/(^|\.)huggingface\.co$/i, 'huggingface'],
-  [/(^|\.)npmjs\.com$/i, 'npm'],
-  [/(^|\.)registry\.npmjs\.org$/i, 'npm'],
-  [/(^|\.)pypi\.org$/i, 'pypi'],
+/**
+ * Where, on each platform's own hosts, the owner/name that an id names must
+ * sit in a URL's path — exactly there, never anywhere else in the path. A
+ * function returns the identity segments a URL carries, or null if the URL is
+ * not one this platform serves declarations from.
+ */
+const seg = (u) => u.pathname.split('/').filter(Boolean).map((x) => decodeURIComponent(x).toLowerCase());
+const PLATFORM_HOSTS = [
+  // github.com/<owner>/<repo>/…, raw.githubusercontent.com/<owner>/<repo>/<ref>/…, api.github.com/repos/<owner>/<repo>/…
+  [/^(www\.)?github\.com$/i, 'github', (u) => seg(u).slice(0, 2)],
+  [/^raw\.githubusercontent\.com$/i, 'github', (u) => seg(u).slice(0, 2)],
+  [/^api\.github\.com$/i, 'github', (u) => (seg(u)[0] === 'repos' ? seg(u).slice(1, 3) : null)],
+  // huggingface.co/<owner>/<repo>, or /spaces|datasets|models/<owner>/<repo>
+  [/^(www\.)?huggingface\.co$/i, 'huggingface', (u) => (['spaces', 'datasets', 'models'].includes(seg(u)[0]) ? seg(u).slice(1, 3) : seg(u).slice(0, 2))],
+  // www.npmjs.com/package/<name> or /package/@scope/<name>; registry.npmjs.org/<name> or /@scope/<name> (or %2f-encoded)
+  [/^(www\.)?npmjs\.com$/i, 'npm', (u) => { const s = seg(u); if (s[0] !== 'package') return null; return s[1]?.startsWith('@') ? (s[1].includes('/') ? s[1].split('/') : s.slice(1, 3)) : s.slice(1, 2); }],
+  [/^registry\.npmjs\.org$/i, 'npm', (u) => { const s = seg(u); return s[0]?.startsWith('@') ? (s[0].includes('/') ? s[0].split('/') : s.slice(0, 2)) : s.slice(0, 1); }],
+  // pypi.org/project/<name>/…
+  [/^pypi\.org$/i, 'pypi', (u) => (seg(u)[0] === 'project' ? seg(u).slice(1, 2) : null)],
 ];
 
 /**
  * Does a retrieval location agree with the declaration's own provenance_id?
  *
  * A declaration served from somewhere other than the location it names was
- * placed there by someone who may have no control over the named project —
- * the re-hosting case. A conformant verifier treats that as unverified
- * however good the signature is.
+ * put there by someone else, whatever its signature says. The comparison is
+ * structural: the id's owner and name must be exactly where the platform puts
+ * them in a URL — a repository that merely contains folders with the right
+ * names is someone else's repository.
  *
- * Returns 'unchecked' when the location cannot be interpreted, so an unknown
- * host is never reported as agreement.
- *
- * @param {string} provenanceId
- * @param {string} retrievedFrom  URL the declaration was fetched from
  * @returns {'match' | 'mismatch' | 'unchecked'}
  */
 function checkLocation(provenanceId, retrievedFrom) {
@@ -366,41 +374,31 @@ function checkLocation(provenanceId, retrievedFrom) {
   }
 
   // provenance:domain:<hostname>[/<path>] — for an agent that runs as a service
-  // and has no public repository. Control is proven the same way as with a
-  // repo: whoever put the file there had write access to the location. Most
-  // commercial agents are this shape, so without it they could never be
-  // verified as their operator's.
+  // and has no public repository. Whoever put the file at that address controls it.
   if (id.platform === 'domain') {
     const [declaredHost, ...declaredPath] = id.path.split('/').filter(Boolean);
     if (!declaredHost) return 'unchecked';
     // Exact host match. A subdomain is a different party as far as this is
     // concerned, and treating it as the same would be the whole attack.
     if (url.hostname.toLowerCase() !== declaredHost.toLowerCase()) return 'mismatch';
+    if (url.port && url.port !== '443') return 'mismatch';
     if (declaredPath.length === 0) return 'match';
-    const segs = url.pathname.split('/').filter(Boolean).map((x) => x.toLowerCase());
+    // The declared path is where the agent lives: the URL must start there.
+    const segs = seg(url);
     const want = declaredPath.map((x) => x.toLowerCase());
-    for (let i = 0; i + want.length <= segs.length; i++) {
-      if (want.every((part, j) => segs[i + j] === part)) return 'match';
-    }
-    return 'mismatch';
+    return want.every((part, j) => segs[j] === part) ? 'match' : 'mismatch';
   }
 
-  const platform = HOST_PLATFORMS.find(([host]) => host.test(url.hostname))?.[1];
-  if (!platform) return 'unchecked';
+  const host = PLATFORM_HOSTS.find(([h]) => h.test(url.hostname));
+  if (!host) return 'unchecked';
+  const [, platform, identityOf] = host;
   if (platform !== id.platform) return 'mismatch';
-
-  // github/huggingface ids are owner/repo; npm and pypi are package names.
-  const segments = url.pathname.split('/').filter(Boolean);
+  if (url.port && url.port !== '443') return 'mismatch';
   const expected = id.path.toLowerCase().split('/').filter(Boolean);
   if (expected.length === 0) return 'unchecked';
-
-  // The declared path must appear as consecutive segments of the URL path.
-  // Covers both https://github.com/owner/repo and raw/blob URLs beneath it.
-  const haystack = segments.map((s) => s.toLowerCase());
-  for (let i = 0; i + expected.length <= haystack.length; i++) {
-    if (expected.every((part, j) => haystack[i + j] === part)) return 'match';
-  }
-  return 'mismatch';
+  const got = identityOf(url);
+  if (!got || got.length !== expected.length) return 'mismatch';
+  return expected.every((part, j) => got[j] === part) ? 'match' : 'mismatch';
 }
 
 /**
@@ -753,6 +751,10 @@ async function checkDeclaration(declaration, options = {}) {
   for (const c of requireCapabilities) {
     if (!capabilities.includes(c)) return refuse(`Agent does not declare capability: ${c}`);
   }
+  if (options.requirePinned) {
+    const loose = (Array.isArray(declaration?.dependencies) ? declaration.dependencies : []).filter((d) => !isPinned(d));
+    if (loose.length) return refuse(`Dependencies not pinned to an exact version: ${loose.map((d) => d.provenance_id ?? d.url).join(', ')}`);
+  }
 
   return { allowed: true, reason: null, verification, anchor };
 }
@@ -918,7 +920,7 @@ async function verifyAttestationWithdrawal(issuerPublicKey, issuerId, attestatio
   }
 }
 
-const NOTICE_VERSIONS = new Set(['0.1']);
+const NOTICE_VERSIONS = new Set(['0.1', '0.2']);
 const NOTICE_EVENTS = new Set(['declaration-published', 'release', 'key-rotation', 'incident']);
 
 /**
@@ -1087,6 +1089,101 @@ async function openDeliveredDeclaration(notice) {
   const n = await verifyNotice(notice, { publicKey: v.publicKey });
   if (!n.valid) return fail(`Notice ${n.status}: ${n.reason}`);
   return { valid: true, reason: null, declaration };
+}
+
+// ---------------------------------------------------------------- pins (0.3)
+
+const PIN_FIELDS = (/* unused pure expression or super */ null && (['version', 'integrity', 'commit', 'declaration_digest']));
+function isPinned(dep) {
+  return dep && typeof dep.pin === 'object' && dep.pin !== null && PIN_FIELDS.some((f) => typeof dep.pin[f] === 'string');
+}
+const depKey = (d) => d?.provenance_id ?? d?.url;
+
+/**
+ * Compare what a build actually resolved (the `resolved` claim of a verified
+ * release or declaration-published notice, format 0.2) with the declaration's
+ * pins. Offline; verify the notice first with verifyNotice.
+ *
+ * For each dependency: 'match' when every pinned field equals what was
+ * resolved; 'mismatch' when any pinned field differs — the pin was declared
+ * and something else shipped; 'unpinned' when something shipped that the
+ * declaration names but does not pin, or does not name at all; 'not_reported'
+ * when a pinned dependency is missing from what was resolved.
+ *
+ * @param {object} declaration
+ * @param {object} notice
+ * @returns {{ dependency: string, result: 'match'|'mismatch'|'unpinned'|'not_reported', differs?: string[] }[]}
+ */
+function checkPins(declaration, notice) {
+  const deps = Array.isArray(declaration?.dependencies) ? declaration.dependencies : [];
+  const resolved = Array.isArray(notice?.claims?.resolved) ? notice.claims.resolved : [];
+  const byKey = new Map(resolved.filter((r) => depKey(r)).map((r) => [depKey(r), r]));
+  const out = [];
+  for (const d of deps) {
+    const key = depKey(d);
+    if (!key) continue;
+    const r = byKey.get(key);
+    byKey.delete(key);
+    if (!isPinned(d)) { if (r) out.push({ dependency: key, result: 'unpinned' }); continue; }
+    if (!r) { out.push({ dependency: key, result: 'not_reported' }); continue; }
+    const differs = PIN_FIELDS.filter((f) => typeof d.pin[f] === 'string' && r[f] !== d.pin[f]);
+    out.push(differs.length ? { dependency: key, result: 'mismatch', differs } : { dependency: key, result: 'match' });
+  }
+  for (const key of byKey.keys()) out.push({ dependency: key, result: 'unpinned' });
+  return out;
+}
+
+// ---------------------------------------------------------- site index (0.1)
+
+const INDEX_MAX = 1000;
+const ID_PATTERN = /^provenance:(github|npm|pypi|huggingface|clawmarket|domain):.+$/;
+
+/**
+ * Where a site's index of declarations lives: one fixed address per host, so a
+ * watcher that knows only a website can discover every passport it publishes
+ * without fetching any other page.
+ *
+ * @param {string} host  e.g. "example.com"
+ * @returns {string|null}
+ */
+function locateIndex(host) {
+  if (typeof host !== 'string' || !/^[a-z0-9.-]+(:\d+)?$/i.test(host.trim())) return null;
+  return `https://${host.trim().toLowerCase()}/.well-known/provenance/index.json`;
+}
+
+/**
+ * Read a site index. A pointer, never proof: every entry must still be
+ * verified at its own location, and an entry off this site is only what the
+ * site claims it publishes. Refuses an index whose `site` is not the host it
+ * was fetched from.
+ *
+ * @param {object} index           parsed index.json
+ * @param {object} options
+ * @param {string} options.fetchedFrom  URL the index was fetched from
+ * @returns {{ valid: boolean, reason: string|null, site: string|null, operator: string|null,
+ *             agents: { provenanceId: string, name: string|null, onSite: boolean }[] }}
+ */
+function readIndex(index, { fetchedFrom } = {}) {
+  const bad = (reason) => ({ valid: false, reason, site: null, operator: null, agents: [] });
+  if (index === null || typeof index !== 'object' || Array.isArray(index)) return bad('Index must be an object');
+  if (index.provenance_index !== '0.1') return bad(`Index version ${JSON.stringify(index.provenance_index ?? null)} is not known to this reader`);
+  let host;
+  try { host = new URL(fetchedFrom).host.toLowerCase(); } catch { return bad('fetchedFrom must be the URL the index came from'); }
+  if (typeof index.site !== 'string' || index.site.toLowerCase() !== host) {
+    return bad(`Index names site ${JSON.stringify(index.site ?? null)} but was fetched from ${host}`);
+  }
+  if (!Array.isArray(index.agents)) return bad('Index has no agents list');
+  const seen = new Set();
+  const agents = [];
+  for (const entry of index.agents.slice(0, INDEX_MAX)) {
+    const id = entry?.provenance_id;
+    if (typeof id !== 'string' || !ID_PATTERN.test(id) || seen.has(id)) continue;
+    seen.add(id);
+    const parsed = parseProvenanceId(id);
+    const onSite = parsed?.platform === 'domain' && parsed.path.split('/')[0].toLowerCase() === host;
+    agents.push({ provenanceId: id, name: typeof entry.name === 'string' ? entry.name.slice(0, 200) : null, onSite });
+  }
+  return { valid: true, reason: null, site: host, operator: typeof index.operator === 'string' ? index.operator : null, agents };
 }
 
 

@@ -55,6 +55,15 @@ t('accepts a correctly signed 0.2 declaration', !r.failed, r.stdout.slice(-300))
 t('reports the whole declaration is covered', r.outputs.includes('declaration'), r.outputs);
 t('no spurious version warning', !r.stdout.includes('not known to this action'));
 
+// 1b. a 0.3 declaration with a pinned dependency: known, verified, and still tamper-evident
+const base3 = { ...base, provenance: '0.3', dependencies: [{ provenance_id: 'provenance:domain:model.example', pin: { version: '4.1' } }] };
+const signed3 = { ...base3, identity: { ...base3.identity, signature: signDeclaration(privateKey, base3) } };
+r = runAction(signed3);
+t('accepts a correctly signed 0.3 declaration with a pinned dependency', !r.failed && r.outputs.includes('declaration'), r.stdout.slice(-300));
+t('no version warning for 0.3', !r.stdout.includes('not known to this action'), r.stdout.slice(-300));
+r = runAction({ ...signed3, dependencies: [{ provenance_id: 'provenance:domain:model.example', pin: { version: '9.9' } }] });
+t('rejects a 0.3 declaration whose pin was changed after signing', r.failed && r.stdout.includes('does not verify'), r.stdout.slice(-200));
+
 // 2. THE CASE SHAPE VALIDATION CANNOT CATCH: edited after signing
 r = runAction({ ...signed, constraints: [] });
 t('rejects a declaration edited after signing', r.failed);

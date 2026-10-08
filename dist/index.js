@@ -31839,9 +31839,10 @@ const fs = __nccwpck_require__(9896);
 const path = __nccwpck_require__(6928);
 const yaml = __nccwpck_require__(4281);
 
-// Spec versions this action understands. 0.2 signs the whole declaration;
-// 0.1 signs only the identity, leaving capabilities and constraints unprotected.
-const KNOWN_SPEC_VERSIONS = ['0.1', '0.2'];
+// Spec versions this action understands. 0.2 and 0.3 sign the whole declaration
+// (0.3 adds pinned dependencies); 0.1 signs only the identity, leaving
+// capabilities and constraints unprotected.
+const KNOWN_SPEC_VERSIONS = ['0.1', '0.2', '0.3'];
 
 // Standard vocabulary, read from the standard itself so the two cannot drift.
 // See SPEC.md, Capability Vocabulary, in provenance-protocol.

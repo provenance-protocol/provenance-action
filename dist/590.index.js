@@ -8619,9 +8619,10 @@ const schema = (name) => {
   return cache.get(name);
 };
 
-const DECLARATION_SCHEMAS = { '0.1': 'provenance-0.1.json', '0.2': 'provenance-0.2.json' };
+const DECLARATION_SCHEMAS = { '0.1': 'provenance-0.1.json', '0.2': 'provenance-0.2.json', '0.3': 'provenance-0.3.json' };
 const ATTESTATION_SCHEMAS = { '0.1': 'attestation-0.1.json' };
-const NOTICE_SCHEMAS = { '0.1': 'notice-0.1.json' };
+const NOTICE_SCHEMAS = { '0.1': 'notice-0.1.json', '0.2': 'notice-0.2.json' };
+const INDEX_SCHEMAS = { '0.1': 'index-0.1.json' };
 
 const KNOWN = new Set([
   '$schema', '$id', '$comment', 'title', 'description',
@@ -8758,6 +8759,16 @@ function validateAttestation(attestation) {
  */
 function validateNotice(notice) {
   return run(notice, 'notice', NOTICE_SCHEMAS, 'Notice');
+}
+
+/**
+ * Validate a parsed site index against the schema for its `provenance_index` version.
+ *
+ * @param {object} index
+ * @returns {{ valid: boolean, errors: string[], warnings: string[] }}
+ */
+function validateIndex(index) {
+  return run(index, 'provenance_index', INDEX_SCHEMAS, 'Index');
 }
 
 ;// CONCATENATED MODULE: ./node_modules/provenance-protocol/src/init.js
